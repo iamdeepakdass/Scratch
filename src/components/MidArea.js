@@ -124,8 +124,8 @@ export default function MidArea() {
         })
       );
     } else if (action === "goToRandom") {
-      const randomX = generateRandomInt(-100, 100);
-      const randomY = generateRandomInt(-100, 100);
+      const randomX = generateRandomInt(-5, 5);
+      const randomY = generateRandomInt(-5, 5);
       dispatch(
         addInstruction({
           id: currentCharacter,

@@ -6,7 +6,7 @@ import {
   resetInstructions,
 } from "../redux/slices/instructions/slice";
 import { resetSprites } from "../redux/slices/sprite/slice";
-import anime from "animejs";
+import Matter, { Bodies } from "matter-js";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
@@ -14,13 +14,26 @@ export default function PreviewArea() {
   const dispatch = useDispatch();
   const sprites = useSelector((state) => state.sprite);
   const isPlayingRef = useRef(false);
+  const divCanvasRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const spriteRefs = useRef([]);
   const spriteInstructions = useSelector((state) => state.instructions);
+  const [spriteObjects, setSpriteObjects] = useState([]);
   const [position, setPosition] = useState([]);
   const [rotation, setRotation] = useState([]);
   const [scale, setScale] = useState([]);
   let instructionsIndex = 0;
+
+  let Engine = Matter.Engine,
+    Render = Matter.Render,
+    World = Matter.World,
+    Bodies = Matter.Bodies,
+    Body = Matter.Body;
+
+  const [world, setWorld] = useState();
+  const [engine, setEngine] = useState();
+  const [runner, setRunner] = useState();
+  const [render, setRender] = useState();
 
   function checkIfInstructionLeft(instructionsIndex) {
     for (let i = 0; i < spriteInstructions.length; i++) {
@@ -53,110 +66,179 @@ export default function PreviewArea() {
           let instruction =
             spriteInstructions[i].instructions[instructionsIndex];
 
-          let animation;
+          let animation = null;
           switch (instruction.action) {
             case "moveX":
-              animation = anime({
-                targets: spriteRefs.current[i],
-                translateX: `+=${instruction.steps}`,
-                easing: "linear",
-                duration: 500,
+              animation = new Promise((resolve, reject) => {
+                Body.setVelocity(spriteObjects[i], {
+                  x: 1 * (parseInt(instruction.steps) > 0 ? 1 : -1),
+                  y: 0,
+                });
+                setTimeout(() => {
+                  Body.setVelocity(spriteObjects[i], { x: 0, y: 0 });
+                  const updatedPosition = [...position];
+                  updatedPosition[i].x += instruction.steps;
+
+                  setPosition(updatedPosition);
+                  resolve();
+                }, 1000 * Math.abs(parseInt(instruction.steps)));
               });
-              position[i].x += instruction.steps;
               break;
 
             case "moveY":
-              animation = anime({
-                targets: spriteRefs.current[i],
-                translateY: `+=${instruction.steps}`,
-                easing: "linear",
-                duration: 500,
+              console.log(instruction.steps);
+              animation = new Promise((resolve, reject) => {
+                Body.setVelocity(spriteObjects[i], {
+                  x: 0,
+                  y: 1 * (parseInt(instruction.steps) > 0 ? 1 : -1),
+                });
+                setTimeout(() => {
+                  Body.setVelocity(spriteObjects[i], { x: 0, y: 0 });
+                  const updatedPosition = [...position];
+
+                  updatedPosition[i].y += instruction.steps;
+                  setPosition(updatedPosition);
+                  resolve();
+                }, 1000 * Math.abs(parseInt(instruction.steps)));
               });
-              position[i].y += instruction.steps;
               break;
             case "moveXY":
-              animation = anime({
-                targets: spriteRefs.current[i],
-                translateX: `+=${instruction.stepsX}`,
-                translateY: `+=${instruction.stepsY}`,
-                easing: "linear",
-                duration: 500,
+              animation = new Promise((resolve, reject) => {
+                Body.setVelocity(spriteObjects[i], {
+                  x:
+                    parseInt(instruction.stepsX) /
+                    Math.sqrt(
+                      Math.pow(parseInt(instruction.stepsX), 2) +
+                        Math.pow(parseInt(instruction.stepsY), 2)
+                    ),
+                  y:
+                    parseInt(instruction.stepsY) /
+                    Math.sqrt(
+                      Math.pow(parseInt(instruction.stepsX), 2) +
+                        Math.pow(parseInt(instruction.stepsY), 2)
+                    ),
+                });
+                setTimeout(() => {
+                  Body.setVelocity(spriteObjects[i], { x: 0, y: 0 });
+                  const updatedPosition = [...position];
+                  updatedPosition[i].x += instruction.stepsX;
+                  updatedPosition[i].y += instruction.stepsY;
+                  setPosition(updatedPosition);
+                  resolve();
+                }, 1000 * Math.sqrt(Math.pow(parseInt(instruction.stepsX), 2) + Math.pow(parseInt(instruction.stepsY), 2)));
               });
-              position[i].x += instruction.stepsX;
-              position[i].y += instruction.stepsY;
               break;
             case "turnClockwise":
-              animation = anime({
-                targets: spriteRefs.current[i],
-                rotateZ: `+=${instruction.degrees / 360}turn`,
-                easing: "linear",
-                duration: 500,
+              animation = new Promise((resolve, reject) => {
+                Body.setAngularVelocity(spriteObjects[i], Math.PI / 180);
+                setTimeout(() => {
+                  Body.setAngularVelocity(spriteObjects[i], 0);
+                  const updatedRotation = [...rotation];
+                  updatedRotation[i] = spriteObjects[i].angle;
+                  console.log(spriteObjects[i].angle);
+                  setRotation(updatedRotation);
+                  resolve();
+                }, 1000 * ((Math.abs(parseInt(instruction.degrees)) * Math.PI) / 180));
               });
-              rotation[i] += instruction.degrees;
               break;
             case "turnAntiClockwise":
-              animation = anime({
-                targets: spriteRefs.current[i],
-                rotateZ: `-=${instruction.degrees / 360}turn`,
-                easing: "linear",
-                duration: 500,
+              animation = new Promise((resolve, reject) => {
+                Body.setAngularVelocity(spriteObjects[i], -Math.PI / 180);
+                setTimeout(() => {
+                  Body.setAngularVelocity(spriteObjects[i], 0);
+                  const updatedRotation = [...rotation];
+                  updatedRotation[i] = spriteObjects[i].angle;
+                  console.log(spriteObjects[i].angle);
+                  setRotation(updatedRotation);
+                  resolve();
+                }, 1000 * ((Math.abs(parseInt(instruction.degrees)) * Math.PI) / 180));
               });
-              rotation[i] -= instruction.degrees;
               break;
             case "goTo":
-              animation = anime({
-                targets: spriteRefs.current[i],
-                translateX: `+=${instruction.x - position[i].x}`,
-                translateY: `+=${instruction.y - position[i].y}`,
-                easing: "linear",
-                duration: 500,
+              console.log(
+                spriteObjects[i].position.x,
+                spriteObjects[i].position.y
+              );
+              animation = new Promise((resolve, reject) => {
+                Body.setVelocity(spriteObjects[i], {
+                  x:
+                    (instruction.x - position[i].x) /
+                    Math.sqrt(
+                      Math.pow(instruction.x - position[i].x, 2) +
+                        Math.pow(instruction.y - position[i].y, 2)
+                    ),
+                  y:
+                    (instruction.y - position[i].y) /
+                    Math.sqrt(
+                      Math.pow(instruction.x - position[i].x, 2) +
+                        Math.pow(instruction.y - position[i].y, 2)
+                    ),
+                });
+                setTimeout(() => {
+                  Body.setVelocity(spriteObjects[i], { x: 0, y: 0 });
+                  const updatedPosition = [...position];
+                  updatedPosition[i].x = instruction.x;
+                  updatedPosition[i].y = instruction.y;
+                  setPosition(updatedPosition);
+                  resolve();
+                }, 1000 * Math.sqrt(Math.pow(parseInt(instruction.x) - position[i].x, 2) + Math.pow(parseInt(instruction.y) - position[i].y, 2)));
               });
-              position[i].x = instruction.x;
-              position[i].y = instruction.y;
               break;
             case "goToRandom":
-              animation = anime({
-                targets: spriteRefs.current[i],
-                translateX: `+=${instruction.x - position[i].x}`,
-                translateY: `+=${instruction.y - position[i].y}`,
-                easing: "linear",
-                duration: 500,
+              animation = new Promise((resolve, reject) => {
+                Body.setVelocity(spriteObjects[i], {
+                  x:
+                    (instruction.x - position[i].x) /
+                    Math.sqrt(
+                      Math.pow(instruction.x - position[i].x, 2) +
+                        Math.pow(instruction.y - position[i].y, 2)
+                    ),
+                  y:
+                    (instruction.y - position[i].y) /
+                    Math.sqrt(
+                      Math.pow(instruction.x - position[i].x, 2) +
+                        Math.pow(instruction.y - position[i].y, 2)
+                    ),
+                });
+                setTimeout(() => {
+                  Body.setVelocity(spriteObjects[i], { x: 0, y: 0 });
+                  const updatedPosition = [...position];
+                  updatedPosition[i].x = instruction.x;
+                  updatedPosition[i].y = instruction.y;
+                  setPosition(updatedPosition);
+                  resolve();
+                }, 1000 * Math.sqrt(Math.pow(parseInt(instruction.x) - position[i].x, 2) + Math.pow(parseInt(instruction.y) - position[i].y, 2)));
               });
-              position[i].x = instruction.x;
-              position[i].y = instruction.y;
               break;
             case "repeat":
-              if (instruction.times > 0) {
-                dispatch(
-                  editInstruction({
-                    id: spriteInstructions[i].id,
-                    instruction: {
-                      ...instruction,
-                      times: instruction.times - 1,
-                    },
-                  })
-                );
-                instructionsIndex = -1;
-              }
               break;
+
             case "increase":
-              animation = anime({
-                targets: spriteRefs.current[i],
-                scale: `${instruction.size}`,
-                easing: "linear",
-                duration: 500,
+              animation = new Promise((resolve, reject) => {
+                spriteObjects[i].render.sprite.xScale *= instruction.size;
+                spriteObjects[i].render.sprite.yScale *= instruction.size;
+
+                const updatedScale = [...scale];
+                updatedScale[i] = spriteObjects[i].scale;
+                console.log(spriteObjects[i].scale);
+                setScale(updatedScale);
+                resolve();
               });
-              scale[i] *= instruction.size;
               break;
+
             case "decrease":
-              animation = anime({
-                targets: spriteRefs.current[i],
-                scale: `${scale[i] / instruction.size}`,
-                easing: "linear",
-                duration: 500,
+              animation = new Promise((resolve, reject) => {
+                spriteObjects[i].render.sprite.xScale /= instruction.size;
+                spriteObjects[i].render.sprite.yScale /= instruction.size;
+
+                const updatedScale = [...scale];
+                updatedScale[i] = spriteObjects[i].scale;
+                console.log(spriteObjects[i].scale);
+                setScale(updatedScale);
+                resolve();
               });
-              scale[i] /= instruction.size;
               break;
+
             case "say":
               const text = instruction.text;
               const notify = () => toast(text);
@@ -169,81 +251,101 @@ export default function PreviewArea() {
           }
 
           if (animation) {
-            animationPromises.push(animation.finished);
+            animationPromises.push(animation);
           }
         }
       }
 
       await Promise.all(animationPromises);
-
       await animateSprites(instructionsIndex + 1);
     },
     [spriteInstructions]
   );
 
   useEffect(() => {
-    // Initialize the refs array with the correct length
-    spriteRefs.current = spriteRefs.current.slice(0, sprites.length);
+    const newEngine = Engine.create({ gravity: { x: 0, y: 0 } });
+    setEngine(newEngine);
+    const newWorld = newEngine.world;
+    setWorld(newWorld);
+
+    World.clear(newWorld);
+    setSpriteObjects([]);
+
+    sprites.forEach((sprite, index) => {
+      let obj = Bodies.rectangle(50, 50 + 100 * index, 5, 5, {
+        friction: 0,
+        restitution: 1,
+        frictionStatic: 0,
+        frictionAir: 0,
+
+        width: 100,
+        height: 100,
+        angle: 0,
+
+        render: {
+          sprite: {
+            texture: sprite.img,
+            width: 100,
+            height: 100,
+            xScale: 1,
+            yScale: 1,
+          },
+          engine: newEngine,
+        },
+      });
+
+      World.add(newWorld, obj);
+      setSpriteObjects((prev) => [...prev, obj]);
+    });
+
     setPosition(Array(sprites.length).fill({ x: 0, y: 0 }));
     setRotation(Array(sprites.length).fill(0));
     setScale(Array(sprites.length).fill(1));
+
+    const newRender = Render.create({
+      canvas: divCanvasRef.current,
+      engine: newEngine,
+      options: {
+        background: "transparent",
+        wireframes: false,
+      },
+    });
+    setRender(newRender);
+    Render.run(newRender);
+    const newRunner = Matter.Runner.create();
+    setRunner(newRunner);
   }, [sprites]);
 
   return (
     <div className="relative flex-none h-screen w-full overflow-y-auto p-2">
-      {sprites.map((sprite, index) => (
-        <img
-          key={`sprite_${index}`}
-          ref={(el) => (spriteRefs.current[index] = el)}
-          src={sprite.img}
-          className="w-28 h-28"
-          alt={`Sprite ${index + 1}`}
-          style={{
-            transformOrigin: `center center`,
-          }}
-        />
-      ))}
+      <canvas ref={divCanvasRef}></canvas>
 
-      {isPlaying && (
-        <img
-          src="/icons/pause.svg"
-          alt="Pause"
-          className="absolute bottom-10 right-2 w-8 h-8 cursor-pointer"
-          onClick={() => {
-            isPlayingRef.current = false;
-            setIsPlaying((prev) => !prev);
-          }}
-        />
-      )}
       {!isPlaying && (
         <img
           src="/icons/play.svg"
           alt="Play"
-          className="absolute bottom-10 right-2 w-8 h-8 cursor-pointer"
+          className="absolute bottom-10 right-2 w-8 h-8 cursor-pointer z-50"
           onClick={async () => {
             setIsPlaying((prev) => !prev);
             isPlayingRef.current = true;
+
+            Matter.Runner.run(runner, engine);
             await animateSprites(instructionsIndex);
             instructionsIndex = 0;
+            Matter.Runner.stop(runner);
           }}
         />
       )}
       <img
         src="/icons/reset.svg"
         alt="Reset"
-        className="absolute bottom-10 right-2 w-8 h-8 mr-10 cursor-pointer"
+        className="absolute bottom-10 right-2 w-8 h-8 mr-10 cursor-pointer z-50"
         onClick={() => {
           dispatch(resetInstructions());
           dispatch(resetSprites());
-          anime({
-            targets: spriteRefs.current[0],
-            translateX: 0,
-            translateY: 0,
-            rotateZ: 0,
-            scale: 1,
-            easing: "steps(1)", // make it quick
-            duration: 500,
-          });
+
+          setIsPlaying(false);
+          isPlayingRef.current = false;
         }}
       />
       <ToastContainer />
