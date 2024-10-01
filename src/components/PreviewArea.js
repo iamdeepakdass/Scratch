@@ -298,6 +298,30 @@ export default function PreviewArea() {
       setSpriteObjects((prev) => [...prev, obj]);
     });
 
+    Matter.Events.on(newEngine, "collisionStart", (event) => {
+      const pairs = event.pairs;
+
+      pairs.forEach((pair) => {
+        const { bodyA, bodyB } = pair;
+
+        // Exchange properties
+        const tempPosition = { ...bodyA.position };
+        const tempVelocity = { ...bodyA.velocity };
+        const tempAngle = bodyA.angle;
+        const tempAngularVelocity = bodyA.angularVelocity;
+
+        Body.setPosition(bodyA, bodyB.position);
+        Body.setVelocity(bodyA, { x: -bodyB.velocity.x, y: -bodyB.velocity.y });
+        Body.setAngle(bodyA, bodyB.angle);
+        Body.setAngularVelocity(bodyA, -bodyB.angularVelocity);
+
+        Body.setPosition(bodyB, tempPosition);
+        Body.setVelocity(bodyB, { x: -tempVelocity.x, y: -tempVelocity.y });
+        Body.setAngle(bodyB, tempAngle);
+        Body.setAngularVelocity(bodyB, -tempAngularVelocity);
+      });
+    });
+
     setPosition(Array(sprites.length).fill({ x: 0, y: 0 }));
     setRotation(Array(sprites.length).fill(0));
     setScale(Array(sprites.length).fill(1));
